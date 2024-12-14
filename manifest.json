@@ -1,4 +1,5 @@
 {
+<<<<<<< HEAD
 	"id": "obsidian-eagle",
 	"name": "Obsidian Eagle",
 	"version": "1.0.3",
@@ -7,4 +8,15 @@
 	"author": "oleksiiluchnikov",
 	"authorUrl": "https://oleksii-luchnikov.com",
 	"isDesktopOnly": false
+=======
+	"id": "eagle-sync",
+	"name": "Eagle Sync",
+	"version": "1.0.0",
+	"minAppVersion": "0.15.0",
+	"description": "Sync your Obsidian vault with Eagle",
+	"author": "Oleksii Luchnikov",
+	"authorUrl": "https://oleksii-luchnikov.com",
+	"fundingUrl": "https://patreon.com/oleksii_luchnikov",
+	"isDesktopOnly": true
+>>>>>>> 4ae06d7445daad1057b12a6aa04353fceaa8a046
 }
