@@ -1,9 +1,5 @@
 # vscode
-<<<<<<< HEAD
 .vscode
-=======
-.vscode 
->>>>>>> 4ae06d7445daad1057b12a6aa04353fceaa8a046
 
 # Intellij
 *.iml
@@ -12,18 +8,9 @@
 # npm
 node_modules
 
-<<<<<<< HEAD
 # Don't include the compiled main.js file in the repo.
 # They should be uploaded to GitHub releases instead.
 dist
-=======
-# yarn
-yarn.lock
-
-# Don't include the compiled main.js file in the repo.
-# They should be uploaded to GitHub releases instead.
-main.js
->>>>>>> 4ae06d7445daad1057b12a6aa04353fceaa8a046
 
 # Exclude sourcemaps
 *.map
@@ -33,9 +20,6 @@ data.json
 
 # Exclude macOS Finder (System Explorer) View States
 .DS_Store
-<<<<<<< HEAD
 
 pnpm-lock.yaml
 package-lock.json
-=======
->>>>>>> 4ae06d7445daad1057b12a6aa04353fceaa8a046
