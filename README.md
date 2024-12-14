@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 # Obsidian Eagle
+=======
+# Obsidian Eagle Sync
+>>>>>>> 4ae06d7445daad1057b12a6aa04353fceaa8a046
 
 This is a plugin for [Obsidian](https://obsidian.md/) that allows you to interact with [Eagle](https://eagle.cool/) assets.
 This plugin is under early development and is not much ready for use.
@@ -19,6 +23,7 @@ Add eagle folder ID to the note. Usually in frontmatter, or inline dataview fiel
 eagle_folder_id: "LYVR9BPYU1UO4"
 ```
 
+<<<<<<< HEAD
 # Installation
 
 ```sh
@@ -27,6 +32,8 @@ npm install
 npm run build
 ```
 
+=======
+>>>>>>> 4ae06d7445daad1057b12a6aa04353fceaa8a046
 ## License
 
 [MIT](https://choosealicense.com/licenses/mit/)
