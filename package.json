@@ -1,0 +1,33 @@
+{
+    "name": "obsidian-eagle",
+    "version": "1.0.3",
+    "description": "A plugin friend for Eagle asset manager application",
+    "main": "main.js",
+    "scripts": {
+        "lint": "npx eslint --ext .ts,.svelte .",
+        "dev": "npm run lint && vite build --watch && cp -r dist/* ~/knowledge/.obsidian/plugins/obsidian-eagle/ && cp manifest.json ~/knowledge/.obsidian/plugins/obsidian-eagle/",
+        "build": "npx svelte-check && vite build && cp -r dist/* ~/knowledge/.obsidian/plugins/obsidian-eagle/ && cp manifest.json ~/knowledge/.obsidian/plugins/obsidian-eagle/",
+        "bumpversion": "node version-bump.mjs && git add manifest.json versions.json"
+    },
+    "keywords": [],
+    "author": "oleksiiluchnikov",
+    "devDependencies": {
+        "@sveltejs/vite-plugin-svelte": "^3.1.0",
+        "@tsconfig/svelte": "^5.0.4",
+        "@types/node": "^20.12.7",
+        "@typescript-eslint/eslint-plugin": "6.21.0",
+        "@typescript-eslint/parser": "6.21.0",
+        "builtin-modules": "3.3.0",
+        "eslint": "^8.57.0",
+        "eslint-plugin-svelte": "^2.37.0",
+        "obsidian": "latest",
+        "obsidian-typings": "^1.0.8",
+        "svelte": "^4.2.15",
+        "svelte-check": "^3.6.9",
+        "svelte-eslint-parser": "^0.34.1",
+        "svelte-preprocess": "^5.1.4",
+        "tslib": "2.4.0",
+        "typescript": "5.3.3",
+        "vite": "^5.2.10"
+    }
+}
