@@ -111,6 +111,7 @@ onMount(async () => {
 </script>
 
 {#if item.src}
+    <div class="item-card">
     <a href="eagle://item/{id}" on:click|preventDefault={item.openItem}>
     <img
         src={item.src}
@@ -118,9 +119,26 @@ onMount(async () => {
         style="width: 100%; height: auto;"
     />
     </a>
+    <p>{id}</p>
+    </div>
 {/if}
 
 <style>
+    .item-card {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 0;
+        border-radius: 6px;
+        background-color: rgba(0, 0, 0, 0.2);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .item-card p {
+        margin: 0;
+        padding: 0.5em;
+        align-self: left;
+    }
     img {
         display: block;
         max-width: 100%;
