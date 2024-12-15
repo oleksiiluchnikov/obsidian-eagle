@@ -12,12 +12,14 @@ interface EagleSyncSettings {
     serverUrl: string;
     imageSourceType: ImageSourceType;
     imageBaseUrl: string;
+    defaultColWidth: number;
 }
 
 const DEFAULT_SETTINGS: EagleSyncSettings = {
     serverUrl: 'http://localhost:41595',
     imageSourceType: ImageSourceType.BASE64,
     imageBaseUrl: '',
+    defaultColWidth: 100,
 };
 
 
@@ -224,13 +226,25 @@ class EagleSettingTab extends PluginSettingTab {
             .setName('Image Base URL')
             .setDesc('Template URL for images. Use {name} as placeholder for the image filename')
             .addText(text => text
-                .setPlaceholder('http://nas.local/www/nas.library/{name}')
+                .setPlaceholder('https://your-website.com/images/eagle.library')
                 .setValue(this.plugin.settings.imageBaseUrl)
                 .onChange(async (value) => {
                     this.plugin.settings.imageBaseUrl = value;
                     await this.plugin.saveSettings();
                 }));
 
+        const defaultColWidthSetting = new Setting(containerEl)
+            .setName('Default Column Width')
+            .setDesc('Default width of columns in the gallery')
+            .addText(text => text
+                .setPlaceholder('100')
+                .setValue(this.plugin.settings.defaultColWidth.toString())
+                .onChange(async (value) => {
+                    this.plugin.settings.defaultColWidth = parseInt(value);
+                    await this.plugin.saveSettings();
+                }));
+
+        defaultColWidthSetting.settingEl.createEl('span', {text: 'px'});
         // Show/hide base URL setting based on current selection
         baseUrlSetting.settingEl.style.display =
             this.plugin.settings.imageSourceType === ImageSourceType.BASE_URL ? 'flex' : 'none';
