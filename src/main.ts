@@ -1,22 +1,29 @@
-import { App, ItemView, Platform, Plugin, PluginSettingTab, Setting, WorkspaceLeaf } from 'obsidian';
-
-import DiceRoller from "./ui/DiceRoller.svelte";
+import { App, ItemView, Platform, Plugin, PluginSettingTab, Setting, WorkspaceLeaf, TFile } from 'obsidian';
+import Gallery from "./components/Gallery.svelte";
 
 const VIEW_TYPE = "svelte-view";
 
-// Remember to rename these classes and interfaces!
-
-interface MyPluginSettings {
-    mySetting: string;
+enum ImageSourceType {
+    BASE_URL = 'url',
+    BASE64 = 'base64'
 }
 
-const DEFAULT_SETTINGS: MyPluginSettings = {
-    mySetting: 'default'
+interface EagleSyncSettings {
+    serverUrl: string;
+    imageSourceType: ImageSourceType;
+    imageBaseUrl: string;
+}
+
+const DEFAULT_SETTINGS: EagleSyncSettings = {
+    serverUrl: 'http://localhost:41595',
+    imageSourceType: ImageSourceType.BASE64,
+    imageBaseUrl: '',
 };
 
 
 class MySvelteView extends ItemView {
-    private component: DiceRoller | null = null;
+    private component: Gallery | null = null;
+    private settings: EagleSyncSettings = DEFAULT_SETTINGS;
 
     constructor(leaf: WorkspaceLeaf) {
         super(leaf);
@@ -27,21 +34,77 @@ class MySvelteView extends ItemView {
     }
 
     getDisplayText(): string {
-        return "Dice Roller";
+        return "Eagle";
     }
 
     getIcon(): string {
-        return "dice";
+        return "sync";
+    }
+
+    async clearGallery() {
+		// Destroy the existing component if it exists
+		if (this.component) {
+		    this.component.$destroy();
+		    this.component = null;
+		}
+		// Clear the content element
+		this.contentEl.empty();
+    }
+
+    private getImageSource(filename: string): string {
+        switch (this.settings.imageSourceType) {
+            case ImageSourceType.BASE_URL:
+                return this.settings.imageBaseUrl.replace('{name}', filename);
+            case ImageSourceType.BASE64:
+                // For base64, the filename should actually be the base64 content
+                return `data:image/png;base64,${filename}`;
+            default:
+                return filename;
+        }
+    }
+
+    async loadGallery({activeFile}: {activeFile?: TFile}) {
+        await this.clearGallery();
+
+        if (!activeFile) return;
+
+        this.app.vault.cachedRead(activeFile).then(async (content: string) => {
+            this.component = new Gallery({
+                target: this.contentEl,
+                props: {
+                    content,
+                    settings: this.settings,
+                }
+            });
+        });
     }
 
     async onOpen(): Promise<void> {
-        this.component = new DiceRoller({target: this.contentEl, props: {}});
+
+        const activeFile = this.app.workspace.getActiveFile();
+        if (!activeFile) return;
+
+        await this.loadGallery({
+            activeFile,
+        });
     }
 }
 
 export default class MyPlugin extends Plugin {
     private view: MySvelteView | null = null;
-    settings: MyPluginSettings = DEFAULT_SETTINGS;
+    settings: EagleSyncSettings = DEFAULT_SETTINGS;
+
+    private async reloadGallery() {
+        const activeFile = this.app.workspace.getActiveFile();
+        if (!activeFile) {
+            await this.view?.clearGallery();
+            return;
+        }
+
+        await this.view?.loadGallery({
+            activeFile,
+        });
+    }
 
     async onload() {
         await this.loadSettings();
@@ -54,7 +117,7 @@ export default class MyPlugin extends Plugin {
         this.app.workspace.onLayoutReady(this.onLayoutReady.bind(this));
 
         // This creates an icon in the left ribbon.
-        this.addRibbonIcon('dice', 'Sample Plugin', (evt: MouseEvent) => this.openMapView());
+        this.addRibbonIcon('sync', 'Eagle', (evt: MouseEvent) => this.openMapView());
 
         // This adds a simple command that can be triggered anywhere
         this.addCommand({
@@ -63,7 +126,19 @@ export default class MyPlugin extends Plugin {
             callback: () => this.openMapView(),
         });
         // This adds a settings tab so the user can configure various aspects of the plugin
-        this.addSettingTab(new SampleSettingTab(this.app, this));
+        this.addSettingTab(new EagleSettingTab(this.app, this));
+
+        // Register event handlers for file changes
+        this.registerEvent(
+            this.app.workspace.on('active-leaf-change', () => this.reloadGallery())
+        );
+
+        this.registerEvent(
+            this.app.workspace.on('file-open', () => this.reloadGallery())
+        );
+
+        // Initial load
+        await this.reloadGallery();
     }
 
     onLayoutReady(): void {
@@ -78,7 +153,7 @@ export default class MyPlugin extends Plugin {
     }
 
     onunload() {
-
+        this.app.workspace.detachLeavesOfType(VIEW_TYPE);
     }
 
     async loadSettings() {
@@ -101,7 +176,7 @@ export default class MyPlugin extends Plugin {
     }
 }
 
-class SampleSettingTab extends PluginSettingTab {
+class EagleSettingTab extends PluginSettingTab {
     plugin: MyPlugin;
 
     constructor(app: App, plugin: MyPlugin) {
@@ -114,17 +189,50 @@ class SampleSettingTab extends PluginSettingTab {
 
         containerEl.empty();
 
-        containerEl.createEl('h2', {text: 'Settings for my awesome plugin.'});
+        containerEl.createEl('h2', {text: 'Eagle Sync Settings'});
 
         new Setting(containerEl)
-            .setName('Setting #1')
-            .setDesc('It\'s a secret')
+            .setName('Server URL')
+            .setDesc('The URL of the Eagle server.')
             .addText(text => text
-                .setPlaceholder('Enter your secret')
-                .setValue(this.plugin.settings.mySetting)
+                .setPlaceholder('http://localhost:41595')
+                .setValue(this.plugin.settings.serverUrl)
                 .onChange(async (value) => {
-                    this.plugin.settings.mySetting = value;
+                    this.plugin.settings.serverUrl = value;
                     await this.plugin.saveSettings();
                 }));
+
+        new Setting(containerEl)
+            .setName('Image Source Type')
+            .setDesc('How to load images in the gallery')
+            .addDropdown(dropdown => dropdown
+                .addOption(ImageSourceType.BASE_URL, 'Website URL')
+                .addOption(ImageSourceType.BASE64, 'Base64 Content')
+                .setValue(this.plugin.settings.imageSourceType)
+                .addOption(ImageSourceType.BASE_URL, 'Website URL')
+                .addOption(ImageSourceType.BASE64, 'Base64 Content')
+                .setValue(this.plugin.settings.imageSourceType)
+                .onChange(async (value: string) => {
+                    this.plugin.settings.imageSourceType = value as ImageSourceType;
+                    await this.plugin.saveSettings();
+                    // Show/hide base URL setting based on selection
+                    baseUrlSetting.settingEl.style.display =
+                        value === ImageSourceType.BASE_URL ? 'flex' : 'none';
+                }));
+
+        const baseUrlSetting = new Setting(containerEl)
+            .setName('Image Base URL')
+            .setDesc('Template URL for images. Use {name} as placeholder for the image filename')
+            .addText(text => text
+                .setPlaceholder('http://nas.local/www/nas.library/{name}')
+                .setValue(this.plugin.settings.imageBaseUrl)
+                .onChange(async (value) => {
+                    this.plugin.settings.imageBaseUrl = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        // Show/hide base URL setting based on current selection
+        baseUrlSetting.settingEl.style.display =
+            this.plugin.settings.imageSourceType === ImageSourceType.BASE_URL ? 'flex' : 'none';
     }
 }
