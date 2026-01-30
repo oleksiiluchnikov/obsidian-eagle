@@ -5,21 +5,27 @@
 *.iml
 .idea
 
-# npm
+# npm/node
 node_modules
-
-# Don't include the compiled main.js file in the repo.
-# They should be uploaded to GitHub releases instead.
-dist
-
-# Exclude sourcemaps
-*.map
-
-# obsidian
-data.json
-
-# Exclude macOS Finder (System Explorer) View States
-.DS_Store
-
 pnpm-lock.yaml
 package-lock.json
+
+# Build output
+dist
+*.map
+
+# Obsidian plugin
+data.json
+.hotreload
+
+# macOS
+.DS_Store
+
+# Environment and local config
+.env
+.env.local
+*.local
+
+# Logs
+*.log
+npm-debug.log*

@@ -5,9 +5,10 @@
     "main": "main.js",
     "scripts": {
         "lint": "npx eslint --ext .ts,.svelte .",
-        "dev": "npm run lint && vite build --watch && cp -r dist/* ${HOME}/vault/.obsidian/plugins/obsidian-eagle/ && cp manifest.json ${HOME}/vault/.obsidian/plugins/obsidian-eagle/",
-        "build": "npx svelte-check && vite build && cp -r dist/* ${HOME}/vault/.obsidian/plugins/obsidian-eagle/ && cp manifest.json ${HOME}/vault/.obsidian/plugins/obsidian-eagle/",
-        "bumpversion": "node version-bump.mjs && git add manifest.json versions.json"
+        "dev": "vite build --watch",
+        "build": "vite build",
+        "bumpversion": "node version-bump.mjs && git add manifest.json versions.json",
+        "deploy": "node scripts/deploy.mjs"
     },
     "keywords": [],
     "author": "oleksiiluchnikov",
