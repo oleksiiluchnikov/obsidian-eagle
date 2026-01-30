@@ -2,6 +2,7 @@
     "compilerOptions": {
         "baseUrl": ".",
         "inlineSources": true,
+        "sourceMap": true,
         "module": "ESNext",
         "target": "ES6",
         "allowJs": true,
@@ -10,6 +11,8 @@
         "importHelpers": true,
         "isolatedModules": true,
         "strictNullChecks": true,
+        "allowSyntheticDefaultImports": true,
+        "skipLibCheck": true,
         "lib": [
             "DOM",
             "ES5",
@@ -17,10 +20,11 @@
             "ES7"
         ],
         "types": [
-            "obsidian-typings"
+            "obsidian-typings",
+            "svelte",
+            "node"
         ]
     },
-    "extends": "@tsconfig/svelte/tsconfig.json",
     "include": [
         "**/globals.d.ts",
         "**/*.js",

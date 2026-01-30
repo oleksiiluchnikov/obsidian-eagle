@@ -1,5 +1,6 @@
 import { App, ItemView, Platform, Plugin, PluginSettingTab, Setting, WorkspaceLeaf, TFile } from 'obsidian';
 import Gallery from "./components/Gallery.svelte";
+import { mount, unmount } from 'svelte';
 
 const VIEW_TYPE = "svelte-view";
 
@@ -24,7 +25,7 @@ const DEFAULT_SETTINGS: EagleSyncSettings = {
 
 
 class MySvelteView extends ItemView {
-    private component: Gallery | null = null;
+    private component: ReturnType<typeof mount> | null = null;
     private settings: EagleSyncSettings = DEFAULT_SETTINGS;
 
     constructor(leaf: WorkspaceLeaf) {
@@ -44,13 +45,11 @@ class MySvelteView extends ItemView {
     }
 
     async clearGallery() {
-		// Destroy the existing component if it exists
-		if (this.component) {
-		    this.component.$destroy();
-		    this.component = null;
-		}
-		// Clear the content element
-		this.contentEl.empty();
+        if (this.component) {
+            unmount(this.component);
+            this.component = null;
+        }
+        this.contentEl.empty();
     }
 
     private getImageSource(filename: string): string {
@@ -58,7 +57,6 @@ class MySvelteView extends ItemView {
             case ImageSourceType.BASE_URL:
                 return this.settings.imageBaseUrl.replace('{name}', filename);
             case ImageSourceType.BASE64:
-                // For base64, the filename should actually be the base64 content
                 return `data:image/png;base64,${filename}`;
             default:
                 return filename;
@@ -68,21 +66,28 @@ class MySvelteView extends ItemView {
     async loadGallery({activeFile}: {activeFile?: TFile}) {
         await this.clearGallery();
 
-        if (!activeFile) return;
-
-        this.app.vault.cachedRead(activeFile).then(async (content: string) => {
-            this.component = new Gallery({
+        if (!activeFile) {
+            this.component = mount(Gallery, {
                 target: this.contentEl,
                 props: {
-                    content,
+                    content: "",
                     settings: this.settings,
                 }
             });
+            return;
+        }
+
+        const content = await this.app.vault.cachedRead(activeFile);
+        this.component = mount(Gallery, {
+            target: this.contentEl,
+            props: {
+                content: content || "",
+                settings: this.settings,
+            }
         });
     }
 
     async onOpen(): Promise<void> {
-
         const activeFile = this.app.workspace.getActiveFile();
         if (!activeFile) return;
 
@@ -118,19 +123,15 @@ export default class MyPlugin extends Plugin {
 
         this.app.workspace.onLayoutReady(this.onLayoutReady.bind(this));
 
-        // This creates an icon in the left ribbon.
         this.addRibbonIcon('sync', 'Eagle', (evt: MouseEvent) => this.openMapView());
 
-        // This adds a simple command that can be triggered anywhere
         this.addCommand({
             id: 'open-sample-modal-simple',
             name: 'Open sample modal (simple)',
             callback: () => this.openMapView(),
         });
-        // This adds a settings tab so the user can configure various aspects of the plugin
         this.addSettingTab(new EagleSettingTab(this.app, this));
 
-        // Register event handlers for file changes
         this.registerEvent(
             this.app.workspace.on('active-leaf-change', () => this.reloadGallery())
         );
@@ -139,7 +140,6 @@ export default class MyPlugin extends Plugin {
             this.app.workspace.on('file-open', () => this.reloadGallery())
         );
 
-        // Initial load
         await this.reloadGallery();
     }
 
@@ -196,10 +196,10 @@ class EagleSettingTab extends PluginSettingTab {
         new Setting(containerEl)
             .setName('Server URL')
             .setDesc('The URL of the Eagle server.')
-            .addText(text => text
+            .addText((text: Setting) => text
                 .setPlaceholder('http://example.invalid')
                 .setValue(this.plugin.settings.serverUrl)
-                .onChange(async (value) => {
+                .onChange(async (value: string) => {
                     this.plugin.settings.serverUrl = value;
                     await this.plugin.saveSettings();
                 }));
@@ -207,17 +207,13 @@ class EagleSettingTab extends PluginSettingTab {
         new Setting(containerEl)
             .setName('Image Source Type')
             .setDesc('How to load images in the gallery')
-            .addDropdown(dropdown => dropdown
-                .addOption(ImageSourceType.BASE_URL, 'Website URL')
-                .addOption(ImageSourceType.BASE64, 'Base64 Content')
-                .setValue(this.plugin.settings.imageSourceType)
+            .addDropdown((dropdown: Setting) => dropdown
                 .addOption(ImageSourceType.BASE_URL, 'Website URL')
                 .addOption(ImageSourceType.BASE64, 'Base64 Content')
                 .setValue(this.plugin.settings.imageSourceType)
                 .onChange(async (value: string) => {
                     this.plugin.settings.imageSourceType = value as ImageSourceType;
                     await this.plugin.saveSettings();
-                    // Show/hide base URL setting based on selection
                     baseUrlSetting.settingEl.style.display =
                         value === ImageSourceType.BASE_URL ? 'flex' : 'none';
                 }));
@@ -225,10 +221,10 @@ class EagleSettingTab extends PluginSettingTab {
         const baseUrlSetting = new Setting(containerEl)
             .setName('Image Base URL')
             .setDesc('Template URL for images. Use {name} as placeholder for the image filename')
-            .addText(text => text
+            .addText((text: Setting) => text
                 .setPlaceholder('https://your-website.com/images/eagle.library')
                 .setValue(this.plugin.settings.imageBaseUrl)
-                .onChange(async (value) => {
+                .onChange(async (value: string) => {
                     this.plugin.settings.imageBaseUrl = value;
                     await this.plugin.saveSettings();
                 }));
@@ -236,16 +232,15 @@ class EagleSettingTab extends PluginSettingTab {
         const defaultColWidthSetting = new Setting(containerEl)
             .setName('Default Column Width')
             .setDesc('Default width of columns in the gallery')
-            .addText(text => text
+            .addText((text: Setting) => text
                 .setPlaceholder('100')
                 .setValue(this.plugin.settings.defaultColWidth.toString())
-                .onChange(async (value) => {
+                .onChange(async (value: string) => {
                     this.plugin.settings.defaultColWidth = parseInt(value);
                     await this.plugin.saveSettings();
                 }));
 
         defaultColWidthSetting.settingEl.createEl('span', {text: 'px'});
-        // Show/hide base URL setting based on current selection
         baseUrlSetting.settingEl.style.display =
             this.plugin.settings.imageSourceType === ImageSourceType.BASE_URL ? 'flex' : 'none';
     }

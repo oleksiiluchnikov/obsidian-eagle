@@ -12,26 +12,28 @@
     "keywords": [],
     "author": "oleksiiluchnikov",
     "devDependencies": {
-        "@sveltejs/vite-plugin-svelte": "^3.1.0",
-        "@tsconfig/svelte": "^5.0.4",
-        "@types/node": "^20.12.7",
-        "@typescript-eslint/eslint-plugin": "6.21.0",
-        "@typescript-eslint/parser": "6.21.0",
-        "builtin-modules": "3.3.0",
-        "eslint": "^8.57.0",
-        "eslint-plugin-svelte": "^2.37.0",
-        "obsidian": "latest",
-        "obsidian-typings": "^1.0.8",
-        "svelte": "^4.2.15",
-        "svelte-check": "^3.6.9",
-        "svelte-eslint-parser": "^0.34.1",
+        "@sveltejs/vite-plugin-svelte": "^5.1.1",
+        "@tsconfig/svelte": "^5.0.6",
+        "@types/node": "^20.19.30",
+        "@typescript-eslint/eslint-plugin": "^8.54.0",
+        "@typescript-eslint/parser": "^8.54.0",
+        "@typescript-eslint/types": "^8.54.0",
+        "builtin-modules": "^3.3.0",
+        "eslint": "^9.39.2",
+        "eslint-plugin-svelte": "^3.14.0",
+        "obsidian": "^1.11.4",
+        "obsidian-typings": "^1.1.6",
+        "svelte": "^5.49.1",
+        "svelte-check": "^4.3.5",
+        "svelte-eslint-parser": "^1.4.1",
         "svelte-preprocess": "^5.1.4",
         "tslib": "2.4.0",
         "typescript": "5.3.3",
-        "vite": "^5.2.10"
+        "vite": "^6.4.1"
     },
     "dependencies": {
-        "@petamorikei/eagle-js": "latest",
-        "sharp": "latest"
+        "@petamorikei/eagle-js": "^0.3.0",
+        "@sveltejs/adapter-auto": "^7.0.0",
+        "sharp": "^0.34.5"
     }
 }

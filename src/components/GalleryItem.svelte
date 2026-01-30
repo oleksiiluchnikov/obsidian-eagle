@@ -1,125 +1,68 @@
 <script lang="ts">
-import { onMount } from 'svelte';
-import { EagleClient } from '@petamorikei/eagle-js';
-import type { GetItemThumbnailResult } from "@petamorikei/eagle-js/dist/types";
-import { promises } from 'fs';
-
-export let id: string;
-export let settings: any;
-
-interface EagleItemCardProps {
+interface Props {
     id: string;
     src: string;
-    alt: string;
-    path: string;
-    ext: string;
-    url: string;
+    settings?: {
+        imageSourceType?: 'base64' | 'url';
+        imageBaseUrl?: string;
+    };
 }
 
-class EagleItemCard {
-    public src: string;
-    public alt: string;
-    public id: string;
-    public path: string;
-    public ext: string;
-    public url: string;
+let { id, src, settings }: Props = $props();
 
-    constructor(props: Partial<EagleItemCardProps> = {}) {
-        this.id = props.id ?? '';
-        this.src = props.src ?? '';
-        this.alt = props.alt ?? '';
-        this.path = props.path ?? '';
-        this.ext = props.ext ?? '';
-        this.url = props.id ?? '';
-    }
+let itemLoaded = $state(false);
+let itemError = $state(false);
 
-    public openItem() {
-        window.open(this.url, '_blank');
-    }
-
-    public toURL(libraryUrl: string): string {
-        // TODO: Handle '_thumbnail.png' or original if not found
-        const encodedFilename = encodeURIComponent(this.path.split('/').pop() || '');
-        return `${libraryUrl}/images/${this.id}.info/${encodedFilename}`;
-    }
-
-    public base64Encode(buffer: Buffer): string {
-        return `data:image/png;base64,${buffer.toString('base64')}`;
-    }
-
-    public async fetchItemThumbnail(id: string): Promise<string | null> {
-        try {
-            const result: GetItemThumbnailResult | null = await EagleClient.instance.getItemThumbnail({ id });
-            return result?.status === 'success' ? result.data : null;
-        } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : String(error);
-            throw new Error(`Failed to fetch Eagle item thumbnail: ${errorMessage}`);
-        }
-    }
-
-    public async readImageBuffer(path: string, ext: string): Promise<Buffer> {
-        try {
-            return await promises.readFile(path);
-        } catch (error) {
-            try {
-                const fallbackPath = path.replace('_thumbnail.png', `.${ext}`);
-                return await promises.readFile(fallbackPath);
-            } catch (fallbackError) {
-                throw new Error('Failed to read image file from both paths');
-            }
-        }
-    }
-}
-
-let item: EagleItemCard = new EagleItemCard();
-
-onMount(async () => {
-    try {
-        const eagleCard = new EagleItemCard({
-            id,
-            src: '',
-            alt: id,
-            url: `eagle://item/${id}`
-        });
-
-        const path = await eagleCard.fetchItemThumbnail(id);
-        if (!path) {
-            console.warn(`No thumbnail found for item ${id}`);
-            return;
-        }
-
-        const ext = path.split('.').pop() || '';
-        eagleCard.path = path;
-        eagleCard.ext = ext;
-
-        const buffer = await eagleCard.readImageBuffer(path, ext);
-
-        eagleCard.src = settings.imageSourceType === 'base64'
-            ? eagleCard.base64Encode(buffer)
-            : settings.imageSourceType === 'url'
-                ? eagleCard.toURL(settings.imageBaseUrl)
-                : (() => {
-                    console.warn('Invalid image source type:', settings.imageSourceType);
-                    return '';
-                })();
-
-        item = eagleCard;
-    } catch (error) {
-        console.error(`Failed to process item ${id}:`, error);
-    }
+$effect(() => {
+    itemLoaded = !!src;
+    itemError = !src;
 });
+
+function openItem(e: Event) {
+    e.preventDefault();
+    window.open(`eagle://item/${id}`, '_blank');
+}
+
+function handleImageLoad() {
+    itemLoaded = true;
+}
+
+function handleImageError() {
+    itemError = true;
+    itemLoaded = false;
+}
 </script>
 
-{#if item.src}
-    <div class="item-card">
-    <a href="eagle://item/{id}" on:click|preventDefault={item.openItem}>
-    <img
-        src={item.src}
-        alt={item.alt}
-        style="width: 100%; height: auto;"
-    />
-    </a>
-    <p>{id}</p>
+{#if src}
+    <div class="item-card" class:loaded={itemLoaded}>
+        <a href="eagle://item/{id}" onclick={openItem}>
+            <img
+                {src}
+                alt={id}
+                loading="lazy"
+                decoding="async"
+                onload={handleImageLoad}
+                onerror={handleImageError}
+                style="width: 100%; height: auto;"
+            />
+        </a>
+        <div class="item-info">
+            <span class="item-id" title={id}>{id}</span>
+        </div>
+    </div>
+{:else if itemError}
+    <div class="item-card error">
+        <div class="item-placeholder">
+            <span class="error-icon">⚠</span>
+            <span class="item-id">{id}</span>
+        </div>
+    </div>
+{:else}
+    <div class="item-card loading">
+        <div class="item-placeholder">
+            <span class="loading-spinner"></span>
+            <span class="item-id">{id}</span>
+        </div>
     </div>
 {/if}
 
@@ -127,22 +70,92 @@ onMount(async () => {
     .item-card {
         display: flex;
         flex-direction: column;
-        align-items: center;
         padding: 0;
         border-radius: 6px;
         background-color: rgba(0, 0, 0, 0.2);
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        overflow: hidden;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
     }
 
-    .item-card p {
-        margin: 0;
-        padding: 0.5em;
-        align-self: left;
+    .item-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
     }
-    img {
+
+    .item-card.loaded {
+        background-color: rgba(0, 0, 0, 0.15);
+    }
+
+    .item-card.error {
+        background-color: rgba(255, 0, 0, 0.1);
+    }
+
+    .item-card.loading {
+        background-color: rgba(255, 255, 0, 0.05);
+    }
+
+    .item-card a {
+        display: block;
+        text-decoration: none;
+        color: inherit;
+    }
+
+    .item-card img {
         display: block;
         max-width: 100%;
         height: auto;
-        border-radius: 4px;
+        border-radius: 4px 4px 0 0;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+    }
+
+    .item-card.loaded img {
+        opacity: 1;
+    }
+
+    .item-info {
+        padding: 0.5em;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .item-id {
+        font-size: 0.75em;
+        color: var(--text-muted);
+        font-family: monospace;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        max-width: 100%;
+    }
+
+    .item-placeholder {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 1.5em;
+        min-height: 100px;
+        gap: 0.5em;
+    }
+
+    .loading-spinner {
+        width: 20px;
+        height: 20px;
+        border: 2px solid var(--text-muted);
+        border-top-color: transparent;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+
+    .error-icon {
+        font-size: 1.5em;
+        color: var(--text-error);
     }
 </style>
