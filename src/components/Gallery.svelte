@@ -1,11 +1,25 @@
 <script lang="ts">
 import { tick } from 'svelte';
-import type { GetItemListResult, GetItemThumbnailResult } from "@petamorikei/eagle-js/dist/types";
-import { EagleClient } from '@petamorikei/eagle-js';
 import { promises } from 'fs';
 import GalleryItem from './GalleryItem.svelte';
 
 type EagleFolderID = string;
+
+interface EagleItem {
+    id: string;
+    name: string;
+    width: number | string;
+    height: number | string;
+    [key: string]: unknown;
+}
+
+interface GridItem {
+    _el: HTMLElement;
+    gap: number;
+    items: HTMLElement[];
+    ncol: number;
+    mod: number;
+}
 
 interface Props {
     content: string;
@@ -13,7 +27,7 @@ interface Props {
         colWidth?: number;
         imageSourceType?: 'base64' | 'url';
         imageBaseUrl?: string;
-        [key: string]: any;
+        [key: string]: unknown;
     };
     stretchFirst?: boolean;
     gridGap?: string;
@@ -24,26 +38,34 @@ let { content, settings, stretchFirst = false, gridGap = '0.5em' }: Props = $pro
 let colWidth = $state(settings?.colWidth || 200);
 let computedColWidth = $derived(`minmax(min(${colWidth}px, 100%), 1fr)`);
 
-const EAGLE_FOLDER_ID_REGEX = /[A-Z0-9]{13}/;
+const EAGLE_FOLDER_URL_REGEX = /eagle:\/\/folder\/([A-Z0-9]{13})/;
 let masonryElement: HTMLElement | undefined = $state(undefined);
-let grids: any[] = $state([]);
+let grids: GridItem[] = $state([]);
 let _window: Window | undefined = $state(undefined);
 const INITIAL_LIMIT = 50;
 const BATCH_SIZE = 50;
 let isLoading = $state(false);
 let hasMore = $state(true);
 let currentOffset = $state(0);
-let itemIds: string[] = $state([]);
+let items: EagleItem[] = $state([]);
 let thumbnailCache = $state<Map<string, string>>(new Map());
+let svgContentCache = $state<Map<string, string>>(new Map());
 
-function base64Encode(buffer: Buffer): string {
-    return `data:image/png;base64,${buffer.toString('base64')}`;
+function base64Encode(buffer: Buffer, mime: string): string {
+    return `data:${mime};base64,${buffer.toString('base64')}`;
+}
+
+function getExtFromPath(p: string): string {
+    const m = p.match(/\.([^\.\/\\?#]+)(?:[?#].*)?$/);
+    return (m && m[1]) ? m[1].toLowerCase() : '';
 }
 
 async function fetchThumbnailPath(id: string): Promise<string | null> {
     try {
-        const result: GetItemThumbnailResult | null = await EagleClient.instance.getItemThumbnail({ id });
-        return result?.status === 'success' ? result.data : null;
+        const response = await fetch(`${EAGLE_SERVER_URL}/api/item/thumbnail?id=${id}`);
+        if (!response.ok) return null;
+        const result = await response.json();
+        return result.status === 'success' ? result.data : null;
     } catch (error) {
         console.warn(`Failed to fetch thumbnail path for ${id}:`, error);
         return null;
@@ -51,6 +73,7 @@ async function fetchThumbnailPath(id: string): Promise<string | null> {
 }
 
 async function loadThumbnail(id: string): Promise<string | null> {
+    // Return cached value if available
     if (thumbnailCache.has(id)) {
         return thumbnailCache.get(id)!;
     }
@@ -60,8 +83,15 @@ async function loadThumbnail(id: string): Promise<string | null> {
         if (!path) return null;
 
         const decodedPath = decodeURIComponent(path);
+        let ext = getExtFromPath(decodedPath);
+
+        // If the original is SVG, let the SVG pipeline handle it
+        if (ext === 'svg') {
+            return null;
+        }
+
         let buffer: Buffer | null = null;
-        const ext = decodedPath.split('.').pop() || 'png';
+        let foundPath: string | null = null;
         const basePath = decodedPath.replace(/_thumbnail\.(png|jpg|jpeg|webp|gif|bmp)$/, '');
 
         const pathsToTry = [
@@ -72,26 +102,42 @@ async function loadThumbnail(id: string): Promise<string | null> {
             `${basePath}.jpg`,
             `${basePath}.jpeg`,
             `${basePath}.webp`,
+            `${basePath}.gif`,
+            `${basePath}.bmp`,
         ];
 
         for (const tryPath of pathsToTry) {
             try {
                 buffer = await promises.readFile(tryPath);
+                foundPath = tryPath;
                 break;
             } catch {
                 continue;
             }
         }
 
-        if (!buffer) {
+        if (!buffer || !foundPath) {
             console.warn(`No thumbnail or original file found for ${id}`);
             return null;
         }
 
-        const src = settings.imageSourceType === 'url'
-            ? `${settings.imageBaseUrl || ''}/images/${id}.info/${path.split('/').pop()}`
-            : base64Encode(buffer);
+        // Determine mime from found path
+        const foundExt = getExtFromPath(foundPath) || ext;
+        const mimeMap: Record<string, string> = {
+            png: 'image/png',
+            jpg: 'image/jpeg',
+            jpeg: 'image/jpeg',
+            webp: 'image/webp',
+            gif: 'image/gif',
+            bmp: 'image/bmp',
+        };
+        const mime = mimeMap[foundExt.toLowerCase()] || 'application/octet-stream';
 
+        const src = settings.imageSourceType === 'url'
+            ? `${settings.imageBaseUrl || ''}/images/${id}.info/${decodedPath.split('/').pop()}`
+            : base64Encode(buffer, mime);
+
+        // Update cache (in-place)
         thumbnailCache.set(id, src);
         return src;
     } catch (error) {
@@ -100,41 +146,70 @@ async function loadThumbnail(id: string): Promise<string | null> {
     }
 }
 
-async function batchLoadThumbnails(ids: string[]): Promise<Map<string, string>> {
+async function batchLoadThumbnails(items: EagleItem[]): Promise<Map<string, string>> {
     const cache = new Map<string, string>();
 
-    const uncachedIds = ids.filter(id => !thumbnailCache.has(id));
+    const uncachedItems = items.filter(item => !thumbnailCache.has(item.id) && String(item.ext).toLowerCase() !== 'svg');
 
-    if (uncachedIds.length === 0) {
-        return thumbnailCache;
+    if (uncachedItems.length === 0) {
+        return cache;
     }
 
     const results = await Promise.allSettled(
-        uncachedIds.map(id => loadThumbnail(id))
+        uncachedItems.map(item => loadThumbnail(item.id))
     );
 
-    uncachedIds.forEach((id, index) => {
+    uncachedItems.forEach((item, index) => {
         const result = results[index];
         if (result.status === 'fulfilled' && result.value) {
-            cache.set(id, result.value);
+            cache.set(item.id, result.value);
         }
     });
 
     return cache;
 }
 
+async function loadSvgContent(id: string): Promise<string | null> {
+    if (svgContentCache.has(id)) {
+        return svgContentCache.get(id)!;
+    }
+
+    try {
+        const pathResult = await fetchThumbnailPath(id);
+        if (!pathResult) return null;
+
+        const decodedPath = decodeURIComponent(pathResult);
+        const svgBuffer = await promises.readFile(decodedPath);
+        const svgString = svgBuffer.toString('utf-8');
+
+        svgContentCache.set(id, svgString);
+        return svgString;
+    } catch (error) {
+        console.warn(`Failed to load SVG for ${id}:`, error);
+        return null;
+    }
+}
+
+const EAGLE_SERVER_URL = 'http://example.invalid';
+
 async function fetchEagleItemsByFolders(
     folders: EagleFolderID[],
     limit: number = INITIAL_LIMIT,
     offset: number = 0
-): Promise<any[] | null> {
+): Promise<EagleItem[] | null> {
     try {
-        const result: GetItemListResult | null = await EagleClient.instance.getItemList({
-            limit,
-            folders,
-            offset
+        const params = new URLSearchParams({
+            limit: limit.toString(),
+            offset: offset.toString(),
         });
-        if (result?.status === 'success') {
+        folders.forEach(f => params.append('folders', f));
+
+        const response = await fetch(`${EAGLE_SERVER_URL}/api/item/list?${params}`);
+        if (!response.ok) {
+            throw new Error(`API error: ${response.status} ${response.statusText}`);
+        }
+        const result = await response.json();
+        if (result.status === 'success' && Array.isArray(result.data)) {
             hasMore = result.data.length === limit;
             return result.data;
         }
@@ -152,13 +227,21 @@ async function loadMoreItems(folderID: string) {
     try {
         const newItems = await fetchEagleItemsByFolders([folderID], BATCH_SIZE, currentOffset);
         if (newItems?.length) {
-            const newIds = newItems.map(item => item.id);
-            itemIds = [...itemIds, ...newIds];
+            items = [...items, ...newItems];
             currentOffset += newItems.length;
 
-            batchLoadThumbnails(newIds).then(() => {
-                thumbnailCache = new Map(thumbnailCache);
-            });
+            const cache = await batchLoadThumbnails(newItems);
+            if (cache.size) {
+                thumbnailCache = new Map([...thumbnailCache, ...cache]);
+            }
+
+            // Load SVG content for any SVG items in the newly loaded batch
+            const svgItems = newItems.filter(item => String(item.ext).toLowerCase() === 'svg');
+            if (svgItems.length) {
+                await Promise.all(svgItems.map(item => loadSvgContent(item.id)));
+                // Trigger reactivity so GalleryItem picks up svgContent
+                svgContentCache = new Map(svgContentCache);
+            }
         }
     } catch (error) {
         console.error('Failed to load more items:', error);
@@ -214,55 +297,73 @@ const calcGrid = async (_masonryArr: HTMLElement[]) => {
     }
 };
 
-function handleScroll() {
-    if (!masonryElement) return;
-
-    const rect = masonryElement.getBoundingClientRect();
-    const bottomOffset = rect.bottom - window.innerHeight;
-
-    if (bottomOffset < 300 && !isLoading && hasMore) {
-        const folderIDMatch = content.match(EAGLE_FOLDER_ID_REGEX);
-        if (folderIDMatch) {
-            loadMoreItems(folderIDMatch[0]);
-        }
-    }
-}
-
 $effect(() => {
     _window = window;
-    _window.addEventListener('resize', refreshLayout, false);
+
+    const handleResize = () => refreshLayout();
+    const handleScroll = () => {
+        if (!masonryElement) return;
+
+        const rect = masonryElement.getBoundingClientRect();
+        const bottomOffset = rect.bottom - window.innerHeight;
+
+        if (bottomOffset < 300 && !isLoading && hasMore) {
+            const folderIDMatch = content.match(EAGLE_FOLDER_URL_REGEX);
+            if (folderIDMatch) {
+                loadMoreItems(folderIDMatch[1]);
+            }
+        }
+    };
+
+    _window.addEventListener('resize', handleResize, false);
     _window.addEventListener('scroll', handleScroll, { passive: true });
 
-    const folderIDMatch = content.match(EAGLE_FOLDER_ID_REGEX);
+    const cleanupEventListeners = () => {
+        _window?.removeEventListener('resize', handleResize, false);
+        _window?.removeEventListener('scroll', handleScroll);
+    };
+
+    const folderIDMatch = content.match(EAGLE_FOLDER_URL_REGEX);
     if (!folderIDMatch) {
-        console.warn('No Eagle folder ID found in content');
-        return;
+        console.warn('No Eagle folder URL found in content');
+        console.log('Content preview:', content.substring(0, 200));
+        return cleanupEventListeners;
     }
 
-    fetchEagleItemsByFolders([folderIDMatch[0]], INITIAL_LIMIT).then(items => {
-        if (!items?.length) {
+    console.log('Found folder ID:', folderIDMatch[1]);
+
+    fetchEagleItemsByFolders([folderIDMatch[1]], INITIAL_LIMIT).then(async itemsData => {
+        if (!itemsData?.length) {
             console.warn('No items found in Eagle folder');
             return;
         }
-        itemIds = items.map((item) => item.id);
-        currentOffset = items.length;
+        items = itemsData;
+        currentOffset = itemsData.length;
 
-        batchLoadThumbnails(itemIds).then(cache => {
-            thumbnailCache = cache;
-            if (masonryElement) {
-                calcGrid([masonryElement]);
-            }
+        const cache = await batchLoadThumbnails(itemsData);
+        if (cache.size) {
+            thumbnailCache = new Map([...thumbnailCache, ...cache]);
+        }
+
+        const svgItems = itemsData.filter(item => String(item.ext).toLowerCase() === 'svg');
+        svgItems.forEach(item => {
+            loadSvgContent(item.id).then(content => {
+                if (content) {
+                    // Trigger reactivity
+                    svgContentCache = new Map(svgContentCache);
+                }
+            });
         });
+
+        if (masonryElement) {
+            calcGrid([masonryElement]);
+        }
     }).catch(error => {
-        console.error('Failed to load Eagle folder contents:', error);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error('Failed to load Eagle folder contents:', errorMessage);
     });
 
-    return () => {
-        if (_window) {
-            _window.removeEventListener('resize', refreshLayout, false);
-            _window.removeEventListener('scroll', handleScroll);
-        }
-    };
+    return cleanupEventListeners;
 });
 
 $effect(() => {
@@ -289,8 +390,15 @@ $effect(() => {
 <div bind:this={masonryElement}
      class={`__grid--masonry ${stretchFirst ? '__stretch-first' : ''}`}
      style={`--grid-gap: ${gridGap}; --col-width: ${computedColWidth};`}>
-    {#each itemIds as id (id)}
-        <GalleryItem {id} src={thumbnailCache.get(id) || ''} {settings} />
+    {#each items as item (item.id)}
+        <GalleryItem 
+            id={item.id} 
+            src={thumbnailCache.get(item.id) || ''} 
+            {settings}
+            ext={item.ext}
+            noThumbnail={item.noThumbnail ?? false}
+            svgContent={String(item.ext).toLowerCase() === 'svg' ? svgContentCache.get(item.id) || null : null}
+        />
     {/each}
     {#if isLoading}
         <div class="loading">Loading more items...</div>

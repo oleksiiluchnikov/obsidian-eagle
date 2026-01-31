@@ -99,18 +99,25 @@ class MySvelteView extends ItemView {
 
 export default class MyPlugin extends Plugin {
     private view: MySvelteView | null = null;
+    private reloadGalleryTimeout: ReturnType<typeof setTimeout> | null = null;
     settings: EagleSyncSettings = DEFAULT_SETTINGS;
 
     private async reloadGallery() {
-        const activeFile = this.app.workspace.getActiveFile();
-        if (!activeFile) {
-            await this.view?.clearGallery();
-            return;
+        if (this.reloadGalleryTimeout) {
+            clearTimeout(this.reloadGalleryTimeout);
         }
 
-        await this.view?.loadGallery({
-            activeFile,
-        });
+        this.reloadGalleryTimeout = setTimeout(async () => {
+            const activeFile = this.app.workspace.getActiveFile();
+            if (!activeFile) {
+                await this.view?.clearGallery();
+                return;
+            }
+
+            await this.view?.loadGallery({
+                activeFile,
+            });
+        }, 100);
     }
 
     async onload() {
@@ -196,23 +203,33 @@ class EagleSettingTab extends PluginSettingTab {
         new Setting(containerEl)
             .setName('Server URL')
             .setDesc('The URL of the Eagle server.')
-            .addText((text: Setting) => text
+            .addText((text) => text
                 .setPlaceholder('http://example.invalid')
                 .setValue(this.plugin.settings.serverUrl)
                 .onChange(async (value: string) => {
-                    this.plugin.settings.serverUrl = value;
+                    const trimmedValue = value.trim();
+                    const isValidUrl = trimmedValue.startsWith('http://') || trimmedValue.startsWith('https://');
+                    if (!isValidUrl && trimmedValue.length > 0) {
+                        console.warn('Invalid server URL format. Expected http:// or https://');
+                        return;
+                    }
+                    this.plugin.settings.serverUrl = trimmedValue;
                     await this.plugin.saveSettings();
                 }));
 
         new Setting(containerEl)
             .setName('Image Source Type')
             .setDesc('How to load images in the gallery')
-            .addDropdown((dropdown: Setting) => dropdown
+            .addDropdown((dropdown) => dropdown
                 .addOption(ImageSourceType.BASE_URL, 'Website URL')
                 .addOption(ImageSourceType.BASE64, 'Base64 Content')
                 .setValue(this.plugin.settings.imageSourceType)
                 .onChange(async (value: string) => {
-                    this.plugin.settings.imageSourceType = value as ImageSourceType;
+                    if (value !== ImageSourceType.BASE_URL && value !== ImageSourceType.BASE64) {
+                        console.warn('Invalid image source type');
+                        return;
+                    }
+                    this.plugin.settings.imageSourceType = value;
                     await this.plugin.saveSettings();
                     baseUrlSetting.settingEl.style.display =
                         value === ImageSourceType.BASE_URL ? 'flex' : 'none';
@@ -221,22 +238,27 @@ class EagleSettingTab extends PluginSettingTab {
         const baseUrlSetting = new Setting(containerEl)
             .setName('Image Base URL')
             .setDesc('Template URL for images. Use {name} as placeholder for the image filename')
-            .addText((text: Setting) => text
+            .addText((text) => text
                 .setPlaceholder('https://your-website.com/images/eagle.library')
                 .setValue(this.plugin.settings.imageBaseUrl)
                 .onChange(async (value: string) => {
-                    this.plugin.settings.imageBaseUrl = value;
+                    this.plugin.settings.imageBaseUrl = value.trim();
                     await this.plugin.saveSettings();
                 }));
 
         const defaultColWidthSetting = new Setting(containerEl)
             .setName('Default Column Width')
             .setDesc('Default width of columns in the gallery')
-            .addText((text: Setting) => text
+            .addText((text) => text
                 .setPlaceholder('100')
                 .setValue(this.plugin.settings.defaultColWidth.toString())
                 .onChange(async (value: string) => {
-                    this.plugin.settings.defaultColWidth = parseInt(value);
+                    const parsedValue = parseInt(value, 10);
+                    if (isNaN(parsedValue) || parsedValue < 20 || parsedValue > 500) {
+                        console.warn('Invalid column width. Must be between 20 and 500');
+                        return;
+                    }
+                    this.plugin.settings.defaultColWidth = parsedValue;
                     await this.plugin.saveSettings();
                 }));
 

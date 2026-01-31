@@ -6,16 +6,29 @@ interface Props {
         imageSourceType?: 'base64' | 'url';
         imageBaseUrl?: string;
     };
+    ext?: string;
+    noThumbnail?: boolean;
+    svgContent?: string | null;
 }
 
-let { id, src, settings }: Props = $props();
+let { id, src, settings, ext, noThumbnail, svgContent }: Props = $props();
 
 let itemLoaded = $state(false);
 let itemError = $state(false);
+let isSvg = $state(false);
 
 $effect(() => {
-    itemLoaded = !!src;
-    itemError = !src;
+    if (ext === 'svg' || noThumbnail) {
+        isSvg = true;
+        if (svgContent) {
+            itemLoaded = true;
+        } else if (!svgContent) {
+            itemError = true;
+        }
+    } else {
+        itemLoaded = !!src;
+        itemError = !src;
+    }
 });
 
 function openItem(e: Event) {
@@ -33,7 +46,18 @@ function handleImageError() {
 }
 </script>
 
-{#if src}
+{#if isSvg && svgContent}
+    <div class="item-card loaded">
+        <a href="eagle://item/{id}" onclick={openItem}>
+            <div class="svg-container">
+                {@html svgContent}
+            </div>
+        </a>
+        <div class="item-info">
+            <span class="item-id" title={id}>{id}</span>
+        </div>
+    </div>
+{:else if src}
     <div class="item-card" class:loaded={itemLoaded}>
         <a href="eagle://item/{id}" onclick={openItem}>
             <img
@@ -112,6 +136,20 @@ function handleImageError() {
 
     .item-card.loaded img {
         opacity: 1;
+    }
+
+    .svg-container {
+        width: 100%;
+        height: auto;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .svg-container :global(svg) {
+        width: 100%;
+        height: auto;
+        max-height: 300px;
     }
 
     .item-info {
